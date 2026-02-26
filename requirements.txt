@@ -1,0 +1,7 @@
+mcp
+httpx
+python-dotenv
+pydantic
+langchain>=1.0,<2.0
+langchain-openai>=1.0,<2.0
+langchain-mcp-adapters
