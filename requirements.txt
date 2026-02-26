@@ -1,7 +1,13 @@
 mcp
 httpx
+requests
 python-dotenv
-pydantic
+pydantic>=2.0
+sqlalchemy>=2.0
+fastapi
+uvicorn[standard]
+celery
+redis
 langchain>=1.0,<2.0
 langchain-openai>=1.0,<2.0
 langchain-mcp-adapters

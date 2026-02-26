@@ -1,8 +1,41 @@
-# MCP Financial + News Servers
+# Invitro Capital Task
 
-Two Python MCP servers (stdio transport) exposing tools for:
-- Structured company fundamentals via Financial Modeling Prep (FMP)
-- Unstructured recent news via NewsAPI
+Python service stack for running ticker-based investment analysis with:
+- MCP tool servers for market data and news
+- A LangChain/OpenAI agent that calls those tools
+- FastAPI endpoints for async job execution
+- Celery worker + Redis queue
+- SQLAlchemy-backed job persistence
+
+## What This Repo Does
+
+The system accepts a ticker (for example `AAPL`), runs an agent that calls:
+1. FMP fundamentals MCP tool (`mcp_servers.fmp_server`)
+2. News MCP tool (`mcp_servers.news_server`)
+
+Then stores the final JSON analysis as a job result retrievable via API.
+
+## Architecture
+
+- API layer: `app/`
+- Background execution: `worker/`
+- Agent orchestration: `agent/`
+- MCP tool servers: `mcp_servers/`
+- Smoke tests / local checks: `scripts/`
+
+Data flow:
+1. `POST /analysis` creates job in DB (`QUEUED`)
+2. API enqueues Celery task (`worker.run_analysis_task`)
+3. Worker loads job input, runs `agent.service.run_analysis()`
+4. Agent starts MCP sessions, calls tools, returns JSON string
+5. Worker persists result and marks job `SUCCEEDED` or `FAILED`
+6. Client polls status and reads result
+
+## Requirements
+
+- Python 3.11+
+- Redis (for Celery broker/backend)
+- API keys for OpenAI, Financial Modeling Prep, and NewsAPI
 
 ## Setup
 
@@ -10,97 +43,182 @@ Two Python MCP servers (stdio transport) exposing tools for:
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-```bash
 cp .env.example .env
 ```
 
-## Run Servers (stdio)
+Set real values in `.env`.
+
+## Environment Variables
+
+Required for full end-to-end run:
+
+- `OPENAI_API_KEY`
+- `FMP_API_KEY`
+- `NEWS_API_KEY`
+
+Optional (defaults shown):
+
+- `OPENAI_MODEL=gpt-4o-mini`
+- `FMP_BASE_URL=https://financialmodelingprep.com/stable`
+- `NEWS_BASE_URL=https://newsapi.org`
+- `HTTP_TIMEOUT_SECONDS=20`
+- `DATABASE_URL=sqlite:///./jobs.db`
+- `REDIS_URL=redis://localhost:6379/0`
+
+See `.env.example` for the canonical template.
+
+## How To Run
+
+### 1) Run MCP servers directly (debug/manual)
 
 ```bash
 python -m mcp_servers.fmp_server
-```
-
-```bash
 python -m mcp_servers.news_server
 ```
 
-## Local Tool Test (direct function calls)
+Use this mode when validating MCP tool behavior in isolation.
+
+### 2) Run API + Worker stack (main app path)
+
+Terminal A (Redis):
+```bash
+redis-server
+```
+
+Terminal B (FastAPI):
+```bash
+uvicorn app.main:app --reload
+```
+
+Terminal C (Celery worker):
+```bash
+celery -A worker.celery_app.celery worker --loglevel=INFO
+```
+
+### 3) Trigger an analysis job
+
+```bash
+curl -X POST http://127.0.0.1:8000/analysis \
+  -H 'Content-Type: application/json' \
+  -d '{"ticker":"AAPL"}'
+```
+
+Then poll:
+
+```bash
+curl http://127.0.0.1:8000/analysis/<job_id>
+curl http://127.0.0.1:8000/analysis/<job_id>/result
+```
+
+## API Contract
+
+### `POST /analysis`
+
+Request body:
+- `ticker` (string, optional)
+- `query` (string, optional)
+- At least one is required
+
+Response:
+- `{"job_id": "<uuid>"}`
+
+### `GET /analysis/{job_id}`
+
+Returns job metadata:
+- `job_id`, `status`, `progress`, `error`, `created_at`, `updated_at`
+
+### `GET /analysis/{job_id}/result`
+
+- `200` with final analysis JSON when job is `SUCCEEDED`
+- `409` while job is not complete (`QUEUED`/`RUNNING`)
+- `409` with error payload when job is `FAILED`
+
+## Main Modules
+
+### `agent/`
+
+- `config.py`: loads and validates runtime settings
+- `mcp_session.py`: MCP session lifecycle helpers
+- `toolkit.py`: starts MCP servers and discovers tools
+- `prompts.py`: system prompt/instructions
+- `factory.py`: builds LangChain agent executor
+- `service.py`: one-shot analysis orchestration (`run_analysis`)
+
+### `mcp_servers/`
+
+- `fmp_server.py`: `get_company_snapshot(ticker)`
+  - aggregates profile, ratios TTM, latest income statement
+- `news_server.py`: `get_recent_news(query, page_size, days_back, language)`
+  - fetches recent articles from NewsAPI
+- `common.py`: env loading, HTTP client setup, shared helpers
+
+### `app/`
+
+- `main.py`: FastAPI app bootstrap + DB init on startup
+- `api.py`: analysis job endpoints
+- `db/engine.py`: SQLAlchemy engine/session setup
+- `db/models.py`: `Job` ORM model
+- `db/crud.py`: minimal job CRUD helpers
+
+### `worker/`
+
+- `celery_app.py`: Celery app + Redis broker/backend config
+- `tasks.py`: background task entrypoint and result persistence
+
+## Smoke Tests
+
+Run these from repo root with virtualenv active.
+
+### DB smoke test
+
+```bash
+python scripts/db_smoke_test.py
+```
+
+Validates table creation and CRUD updates for jobs.
+
+### MCP tools smoke test (direct function calls)
 
 ```bash
 python scripts/test_mcp_tools.py
 ```
 
-## Agent Smoke Test (LangChain + MCP)
+Calls both MCP tool functions directly (requires FMP/News API access).
+
+### Agent smoke test
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
 python scripts/run_agent_smoke_test.py
 ```
 
-## Agent Module 
+Runs `run_analysis("AAPL")` and validates required output JSON keys.
 
-The project now includes a minimal modular agent package in `agent/` that:
-- Loads configuration from `.env` (`OPENAI_API_KEY`, `OPENAI_MODEL`)
-- Starts both MCP servers and discovers tools
-- Builds a LangChain 1.x tool-calling agent (`langchain.agents.create_agent`)
-- Runs analysis for a ticker and returns only the final JSON string
-- Shuts down MCP sessions after each run
+### Async API smoke test
 
-### Current agent flow
+Prereq: Redis + API + Celery running.
 
-1. `agent.config.get_settings()` loads environment settings
-2. `agent.toolkit.create_toolkits()` starts MCP sessions for:
-   - `mcp_servers.fmp_server`
-   - `mcp_servers.news_server`
-3. `agent.factory.create_agent()` creates the OpenAI + tools agent
-4. `agent.service.run_analysis(ticker)` executes the agent and returns JSON output
-5. MCP sessions are stopped in `finally` (per-run lifecycle, no shared global state)
+```bash
+python scripts/async_smoke_test.py
+```
 
-### Package layout
+Creates a job, polls status, and fetches final result.
 
-- `agent/config.py`: settings loading
-- `agent/mcp_session.py`: explicit MCP lifecycle (`start` / `stop`)
-- `agent/toolkit.py`: combine MCP tools from both servers
-- `agent/prompts.py`: system message (agent instructions)
-- `agent/factory.py`: build LangChain agent executor
-- `agent/service.py`: orchestration (`run_analysis`)
+## Operational Notes
 
-### Smoke test behavior
+- DB defaults to local SQLite file (`jobs.db`)
+- Worker normalizes agent output to JSON before storing
+- External network access is required for OpenAI/FMP/NewsAPI calls
+- If Celery cannot import modules when launched from shell, start from repo root
 
-`scripts/run_agent_smoke_test.py`:
-- Calls `run_analysis("AAPL")`
-- Prints the returned output
-- Validates JSON parsing
-- Validates required keys:
-  - `company`, `thesis`, `signal`, `insights`, `sources`
-- Prints `SMOKE TEST PASSED` on success
+## Common Failure Modes
 
-It also enables INFO logs so you can see which module steps were invoked (settings load, MCP startup, tool discovery, agent creation, execution, teardown).
+- Missing `OPENAI_API_KEY`: agent startup fails immediately
+- Missing `FMP_API_KEY` or `NEWS_API_KEY`: MCP tool calls fail at runtime
+- Redis not running: job enqueue/worker processing fails
+- Polling result before completion: `/result` returns `409`
 
-### Important note
+## Development Tips
 
-The smoke test requires outbound network access for:
-- OpenAI API (agent model call)
-- FMP API (financial data)
-- NewsAPI (news fetch)
-
-## Endpoints Used
-
-FMP:
-- `GET {FMP_BASE_URL}/profile?symbol={ticker}&apikey={FMP_API_KEY}`
-- `GET {FMP_BASE_URL}/ratios-ttm?symbol={ticker}&apikey={FMP_API_KEY}`
-- `GET {FMP_BASE_URL}/income-statement?symbol={ticker}&limit=1&apikey={FMP_API_KEY}`
-
-NewsAPI:
-- `GET {NEWS_BASE_URL}/v2/everything`
-  - `q={query}`
-  - `sortBy=publishedAt`
-  - `pageSize={page_size}`
-  - `language={language}`
-  - `from={ISO_DATE}`
-  - `apiKey={NEWS_API_KEY}`
+- Keep API/worker logs open in separate terminals during local runs
+- Use `scripts/async_smoke_test.py` after integration changes
+- Use `scripts/test_mcp_tools.py` when debugging data providers/tool outputs

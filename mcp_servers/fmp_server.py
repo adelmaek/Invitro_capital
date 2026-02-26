@@ -79,6 +79,11 @@ async def get_company_snapshot(ticker: str) -> dict:
     profile_url = f"{base_url}/profile?symbol={symbol}&apikey={api_key}"
     ratios_ttm_url = f"{base_url}/ratios-ttm?symbol={symbol}&apikey={api_key}"
     income_url = f"{base_url}/income-statement?symbol={symbol}&limit=1&apikey={api_key}"
+    profile_url_redacted = str(httpx.URL(f"{base_url}/profile", params={"symbol": symbol}))
+    ratios_ttm_url_redacted = str(httpx.URL(f"{base_url}/ratios-ttm", params={"symbol": symbol}))
+    income_url_redacted = str(
+        httpx.URL(f"{base_url}/income-statement", params={"symbol": symbol, "limit": 1})
+    )
 
     try:
         async with build_http_client() as client:
@@ -124,9 +129,9 @@ async def get_company_snapshot(ticker: str) -> dict:
         period_latest=income.get("date"),
         fetched_at=now_iso(),
         sources={
-            "profile_url": profile_url,
-            "ratios_ttm_url": ratios_ttm_url,
-            "income_statement_url": income_url,
+            "profile_url": profile_url_redacted,
+            "ratios_ttm_url": ratios_ttm_url_redacted,
+            "income_statement_url": income_url_redacted,
         },
     )
     logger.info(
