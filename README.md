@@ -183,6 +183,47 @@ python scripts/async_smoke_test.py
 
 Creates a job, polls status, and fetches final result.
 
+## Sample Results
+
+### Async smoke output
+
+```text
+(ai_venv_py3.14) adelmahmoud@adels-mbp invirto_capital_task % python3 ./scripts/async_smoke_test.py
+[SMOKE] Prompt: Analyze the company whose ticker GOOGL. Return only JSON.
+[SMOKE] App sent API request: POST /analysis
+[SMOKE] Job created: job_id=3aa014a1-4831-463d-b85f-edebb2ac3eb3
+[SMOKE] Polling job status...
+[SMOKE] Poll #1: status=QUEUED progress=0
+[SMOKE] Poll #2: status=RUNNING progress=5
+[SMOKE] Poll #3: status=RUNNING progress=5
+[SMOKE] Poll #4: status=RUNNING progress=5
+[SMOKE] Poll #5: status=RUNNING progress=5
+[SMOKE] Poll #6: status=RUNNING progress=5
+[SMOKE] Poll #7: status=RUNNING progress=5
+[SMOKE] Poll #8: status=RUNNING progress=5
+[SMOKE] Poll #9: status=SUCCEEDED progress=100
+[SMOKE] Terminal status reached: SUCCEEDED
+[SMOKE] Fetching final result...
+[SMOKE] GET /analysis/{job_id}/result -> 200
+[SMOKE] Result payload:
+{'company': 'Alphabet Inc.', 'thesis': "Alphabet Inc. continues to demonstrate strong financial performance with a net income margin of 32.8% and a market capitalization of approximately $3.72 trillion. The company's diverse revenue streams from Google Services, Google Cloud, and Other Bets segments position it well for future growth. Recent advancements in automation technology, such as the Gemini project, indicate a commitment to innovation in its product offerings. However, the competitive landscape in the tech industry remains a challenge.", 'signal': 'Bullish', 'insights': ['Market capitalization stands at approximately $3.72 trillion.', 'Latest revenue reported at $402.96 billion with a net income of $132.17 billion.', 'P/E ratio is 28.08, indicating a relatively high valuation.', 'Gross margin is 59.7%, showcasing strong profitability.', 'Recent news highlights advancements in automation with the Gemini project, enhancing user experience on Android.'], 'sources': ['https://financialmodelingprep.com/stable/profile?symbol=GOOGL', 'https://financialmodelingprep.com/stable/income-statement?symbol=GOOGL&limit=1', 'http://9to5google.com/2026/02/25/android-appfunctions-gemini/']}
+```
+
+### Worker step tracing
+
+```text
+[STEP] Worker consumed job (job_id=3aa014a1-4831-463d-b85f-edebb2ac3eb3)
+[STEP] Worker sent prompt to agent (job_id=3aa014a1-4831-463d-b85f-edebb2ac3eb3)
+[STEP] Agent received prompt (job_id=3aa014a1-4831-463d-b85f-edebb2ac3eb3)
+[STEP] Agent started iterations with 2 tools
+[STEP] Tool call detected: get_company_snapshot args={"ticker": "GOOGL"}
+[STEP] Tool call detected: get_recent_news args={"query": "Google OR GOOGL", "page_size": 20, "days_back": 14}
+[STEP] Tool call result: get_company_snapshot -> { "ticker": "GOOGL", "name": "Alphabet Inc.", "sector": "Technology", "industry": "Internet Content & Information", "description": "Alphabet Inc. provides various products and platforms in the United States, Europe, t...
+[STEP] Tool call result: get_recent_news -> { "query": "Google OR GOOGL", "from": "2026-02-13", "articles": [ { "title": "Gemini can now automate some multi-step tasks on Android - TechCrunch", "description": "Gemini can now automate some multi-step tasks on An...
+[STEP] Agent iterations: 2
+[STEP] Result stored in database (job_id=3aa014a1-4831-463d-b85f-edebb2ac3eb3)
+```
+
 ## Common Failure Modes
 
 - Missing `OPENAI_API_KEY`: agent startup fails immediately
