@@ -9,7 +9,7 @@ Python service stack for running prompt-based investment analysis with:
 
 ## What This Repo Does
 
-The system accepts a natural-language prompt (for example `Analyze AAPL and return only JSON`), then the agent extracts a ticker and calls:
+The system accepts a natural-language prompt (for example `Analyze the company whose ticker GOOGL and return only JSON`), then the agent extracts a ticker and calls:
 1. FMP fundamentals MCP tool (`mcp_servers.fmp_server`)
 2. News MCP tool (`mcp_servers.news_server`)
 
@@ -69,16 +69,7 @@ See `.env.example` for the canonical template.
 
 ## How To Run
 
-### 1) Run MCP servers directly (debug/manual)
-
-```bash
-python -m mcp_servers.fmp_server
-python -m mcp_servers.news_server
-```
-
-Use this mode when validating MCP tool behavior in isolation.
-
-### 2) Run API + Worker stack (main app path)
+### 1) Run API + Worker stack
 
 Terminal A (Redis):
 ```bash
@@ -95,19 +86,10 @@ Terminal C (Celery worker):
 celery -A worker.celery_app.celery worker --loglevel=WARNING
 ```
 
-### 3) Trigger an analysis job
+### 2) Run async API smoke test (recommended path)
 
 ```bash
-curl -X POST http://127.0.0.1:8000/analysis \
-  -H 'Content-Type: application/json' \
-  -d '{"prompt":"Analyze ticker AAPL. Return only JSON."}'
-```
-
-Then poll:
-
-```bash
-curl http://127.0.0.1:8000/analysis/<job_id>
-curl http://127.0.0.1:8000/analysis/<job_id>/result
+python scripts/async_smoke_test.py
 ```
 
 ## API Contract
@@ -201,22 +183,9 @@ python scripts/async_smoke_test.py
 
 Creates a job, polls status, and fetches final result.
 
-## Operational Notes
-
-- DB defaults to local SQLite file (`jobs.db`)
-- Worker normalizes agent output to JSON before storing
-- External network access is required for OpenAI/FMP/NewsAPI calls
-- If Celery cannot import modules when launched from shell, start from repo root
-
 ## Common Failure Modes
 
 - Missing `OPENAI_API_KEY`: agent startup fails immediately
 - Missing `FMP_API_KEY` or `NEWS_API_KEY`: MCP tool calls fail at runtime
 - Redis not running: job enqueue/worker processing fails
 - Polling result before completion: `/result` returns `409`
-
-## Development Tips
-
-- Keep API/worker logs open in separate terminals during local runs
-- Use `scripts/async_smoke_test.py` after integration changes
-- Use `scripts/test_mcp_tools.py` when debugging data providers/tool outputs

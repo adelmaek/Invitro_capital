@@ -21,6 +21,7 @@ TIMEOUT_SECONDS = 60
 
 def main() -> None:
     payload = {"prompt": "Analyze the company whose ticker GOOGL. Return only JSON."}
+    print(f"[SMOKE] Prompt: {payload['prompt']}")
     print("[SMOKE] App sent API request: POST /analysis")
     post_resp = requests.post(f"{BASE_URL}/analysis", json=payload, timeout=10)
     post_resp.raise_for_status()
