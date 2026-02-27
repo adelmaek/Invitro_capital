@@ -1,3 +1,6 @@
+# DIFF SUMMARY:
+# - Updated agent invocation inputs from ticker-only to prompt-only.
+# - Human message forwards original prompt as: "User prompt: <prompt>".
 """Factory for creating the LangChain LLM and agent executor."""
 
 from __future__ import annotations
@@ -21,10 +24,17 @@ class _RunnableExecutorAdapter:
         self._runnable = runnable
 
     async def ainvoke(self, inputs: dict[str, Any]) -> dict[str, str]:
-        ticker = inputs["ticker"]
-        logger.info("Invoking LangChain v1 runnable agent for ticker=%s", ticker)
+        prompt = inputs["prompt"]
+        logger.info("Invoking LangChain v1 runnable agent prompt=%r", prompt)
         result = await self._runnable.ainvoke(
-            {"messages": [{"role": "user", "content": f"Analyze ticker: {ticker}. Return only JSON."}]}
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"User prompt: {prompt}",
+                    }
+                ]
+            }
         )
 
         for msg in reversed(result.get("messages", [])):

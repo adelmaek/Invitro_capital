@@ -1,6 +1,6 @@
 # Invitro Capital Task
 
-Python service stack for running ticker-based investment analysis with:
+Python service stack for running prompt-based investment analysis with:
 - MCP tool servers for market data and news
 - A LangChain/OpenAI agent that calls those tools
 - FastAPI endpoints for async job execution
@@ -9,7 +9,7 @@ Python service stack for running ticker-based investment analysis with:
 
 ## What This Repo Does
 
-The system accepts a ticker (for example `AAPL`), runs an agent that calls:
+The system accepts a natural-language prompt (for example `Analyze AAPL and return only JSON`), then the agent extracts a ticker and calls:
 1. FMP fundamentals MCP tool (`mcp_servers.fmp_server`)
 2. News MCP tool (`mcp_servers.news_server`)
 
@@ -26,7 +26,7 @@ Then stores the final JSON analysis as a job result retrievable via API.
 Data flow:
 1. `POST /analysis` creates job in DB (`QUEUED`)
 2. API enqueues Celery task (`worker.run_analysis_task`)
-3. Worker loads job input, runs `agent.service.run_analysis()`
+3. Worker loads job input (`prompt`), runs `agent.service.run_analysis(prompt=...)`
 4. Agent starts MCP sessions, calls tools, returns JSON string
 5. Worker persists result and marks job `SUCCEEDED` or `FAILED`
 6. Client polls status and reads result
@@ -100,7 +100,7 @@ celery -A worker.celery_app.celery worker --loglevel=INFO
 ```bash
 curl -X POST http://127.0.0.1:8000/analysis \
   -H 'Content-Type: application/json' \
-  -d '{"ticker":"AAPL"}'
+  -d '{"prompt":"Analyze ticker AAPL. Return only JSON."}'
 ```
 
 Then poll:
@@ -115,9 +115,7 @@ curl http://127.0.0.1:8000/analysis/<job_id>/result
 ### `POST /analysis`
 
 Request body:
-- `ticker` (string, optional)
-- `query` (string, optional)
-- At least one is required
+- `prompt` (string, required, non-empty, max 1000 chars)
 
 Response:
 - `{"job_id": "<uuid>"}`
@@ -191,7 +189,7 @@ Calls both MCP tool functions directly (requires FMP/News API access).
 python scripts/run_agent_smoke_test.py
 ```
 
-Runs `run_analysis("AAPL")` and validates required output JSON keys.
+Runs `run_analysis(prompt=...)` and validates required output JSON keys.
 
 ### Async API smoke test
 

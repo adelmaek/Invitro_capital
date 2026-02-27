@@ -1,3 +1,5 @@
+# DIFF SUMMARY:
+# - Updated POST payload to prompt-based request body.
 """API smoke test.
 
 Run server first:
@@ -26,7 +28,11 @@ def main() -> None:
     print("Run server: uvicorn app.main:app --reload")
 
     try:
-        post_resp = requests.post(f"{BASE_URL}/analysis", json={"ticker": "AAPL"}, timeout=5)
+        post_resp = requests.post(
+            f"{BASE_URL}/analysis",
+            json={"prompt": "Analyze the company whose ticker AAPL. Return only JSON."},
+            timeout=5,
+        )
     except requests.RequestException as exc:
         print(f"Server not reachable at {BASE_URL}: {exc}")
         return

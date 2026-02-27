@@ -1,3 +1,5 @@
+# DIFF SUMMARY:
+# - Updated direct run_analysis call to prompt-only signature.
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +24,11 @@ def main() -> None:
     logger = logging.getLogger(__name__)
     logger.info("Starting smoke test")
 
-    output = asyncio.run(run_analysis("AAPL"))
+    output = asyncio.run(
+        run_analysis(
+            prompt="Analyze ticker AAPL. Return only JSON.",
+        )
+    )
     logger.info("run_analysis returned output (length=%d)", len(output))
     print(output)
 

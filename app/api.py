@@ -1,13 +1,17 @@
+# DIFF SUMMARY:
+# - Kept POST /analysis request model as prompt only.
+# - Removed API-side ticker extraction; API now enqueues prompt directly.
 """Minimal FastAPI endpoints for async-job-style analysis flow."""
 
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.db.engine import SessionLocal
@@ -15,17 +19,21 @@ from app.db.models import Job
 from worker.tasks import run_analysis_task
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class AnalysisRequest(BaseModel):
-    ticker: str | None = None
-    query: str | None = None
+    prompt: str
 
-    @model_validator(mode="after")
-    def validate_at_least_one(self) -> "AnalysisRequest":
-        if not (self.ticker or self.query):
-            raise ValueError("At least one of ticker or query must be provided")
-        return self
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, value: str) -> str:
+        prompt = value.strip()
+        if not prompt:
+            raise ValueError("prompt must not be empty")
+        if len(prompt) > 1000:
+            raise ValueError("prompt must be at most 1000 characters")
+        return prompt
 
 
 def get_db() -> Session:
@@ -49,7 +57,7 @@ def _serialize_job(job: Job) -> dict[str, Any]:
 
 @router.post("/analysis")
 def create_analysis_job(payload: AnalysisRequest, db: Session = Depends(get_db)) -> dict[str, str]:
-    request_body = payload.model_dump(exclude_none=True)
+    request_body = {"prompt": payload.prompt}
     job = Job(
         status="QUEUED",
         progress=0,
@@ -58,6 +66,11 @@ def create_analysis_job(payload: AnalysisRequest, db: Session = Depends(get_db))
     db.add(job)
     db.commit()
     db.refresh(job)
+    logger.info(
+        "create_analysis_job queued job_id=%s original_prompt=%r",
+        job.id,
+        payload.prompt,
+    )
     run_analysis_task.delay(job.id)
 
     return {"job_id": job.id}

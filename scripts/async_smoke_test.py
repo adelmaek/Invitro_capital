@@ -1,3 +1,5 @@
+# DIFF SUMMARY:
+# - Updated POST payload to prompt-based request body.
 """Async API smoke test for Celery-backed analysis jobs.
 
 Requires:
@@ -18,8 +20,9 @@ TIMEOUT_SECONDS = 60
 
 
 def main() -> None:
-    print("POST /analysis {'ticker':'AAPL'}")
-    post_resp = requests.post(f"{BASE_URL}/analysis", json={"ticker": "AAPL"}, timeout=10)
+    payload = {"prompt": "Analyze the company whose ticker GOOGL. Return only JSON."}
+    print(f"POST /analysis {payload}")
+    post_resp = requests.post(f"{BASE_URL}/analysis", json=payload, timeout=10)
     post_resp.raise_for_status()
     job_id = post_resp.json()["job_id"]
     print(f"job_id={job_id}")

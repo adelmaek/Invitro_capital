@@ -1,9 +1,13 @@
+# DIFF SUMMARY:
+# - Simplified worker-to-agent interface to pass prompt only.
+# - Worker now validates/logs original_prompt and delegates ticker extraction to the LLM.
 """Celery tasks for background analysis execution."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +22,8 @@ from app.db.crud import get_job, update_job
 from app.db.engine import init_db
 from worker.celery_app import celery
 
+logger = logging.getLogger(__name__)
+
 
 def _normalize_result_json(result: Any) -> str:
     if isinstance(result, str):
@@ -29,7 +35,7 @@ def _normalize_result_json(result: Any) -> str:
     return json.dumps(result)
 
 
-def _run_analysis_with_real_stdio(ticker: str) -> Any:
+def _run_analysis_with_real_stdio(prompt: str, job_id: str) -> Any:
     """Celery may replace stdio with logging proxies that lack fileno()."""
     original_stdout = sys.stdout
     original_stderr = sys.stderr
@@ -41,7 +47,12 @@ def _run_analysis_with_real_stdio(ticker: str) -> Any:
             sys.stderr = sys.__stderr__
         if getattr(sys, "__stdin__", None) is not None:
             sys.stdin = sys.__stdin__
-        return asyncio.run(run_analysis(ticker=ticker))
+        return asyncio.run(
+            run_analysis(
+                prompt=prompt,
+                job_id=job_id,
+            )
+        )
     finally:
         sys.stdout = original_stdout
         sys.stderr = original_stderr
@@ -64,12 +75,25 @@ def run_analysis_task(job_id: str) -> None:
             update_job(job_id, status="FAILED", progress=100, error="invalid input_json")
             return
 
-        ticker = payload.get("ticker") if isinstance(payload, dict) else None
-        if not ticker:
-            update_job(job_id, status="FAILED", progress=100, error="ticker missing")
+        if not isinstance(payload, dict):
+            update_job(job_id, status="FAILED", progress=100, error="invalid payload")
             return
 
-        result = _run_analysis_with_real_stdio(ticker=ticker)
+        prompt = payload.get("prompt")
+        if not prompt:
+            update_job(job_id, status="FAILED", progress=100, error="prompt missing")
+            return
+
+        logger.info(
+            "run_analysis_task executing job_id=%s original_prompt=%r",
+            job_id,
+            prompt,
+        )
+
+        result = _run_analysis_with_real_stdio(
+            prompt=prompt,
+            job_id=job_id,
+        )
         result_json = _normalize_result_json(result)
         update_job(
             job_id,
