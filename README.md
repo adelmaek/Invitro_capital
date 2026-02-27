@@ -92,7 +92,7 @@ uvicorn app.main:app --reload
 
 Terminal C (Celery worker):
 ```bash
-celery -A worker.celery_app.celery worker --loglevel=INFO
+celery -A worker.celery_app.celery worker --loglevel=WARNING
 ```
 
 ### 3) Trigger an analysis job

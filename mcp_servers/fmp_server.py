@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -11,13 +10,7 @@ from pydantic import BaseModel, Field
 
 from .common import build_http_client, get_env, now_iso, safe_float
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-mcp = FastMCP("fmp-financials")
+mcp = FastMCP("fmp-financials", log_level="WARNING")
 
 
 class CompanySnapshot(BaseModel):
@@ -71,7 +64,6 @@ async def get_company_snapshot(ticker: str) -> dict:
     symbol = ticker.strip().upper()
     if not symbol:
         raise ValueError("Ticker must not be empty")
-    logger.info("get_company_snapshot invoked ticker=%s", symbol)
 
     base_url = get_env("FMP_BASE_URL", "https://financialmodelingprep.com/stable").rstrip("/")
     api_key = get_env("FMP_API_KEY")
@@ -85,16 +77,12 @@ async def get_company_snapshot(ticker: str) -> dict:
         httpx.URL(f"{base_url}/income-statement", params={"symbol": symbol, "limit": 1})
     )
 
-    try:
-        async with build_http_client() as client:
-            profile_raw, metrics_raw, income_raw = await asyncio.gather(
-                _get_json(client, profile_url, "profile"),
-                _get_json(client, ratios_ttm_url, "ratios-ttm"),
-                _get_json(client, income_url, "income-statement"),
-            )
-    except Exception:
-        logger.exception("get_company_snapshot failed ticker=%s", symbol)
-        raise
+    async with build_http_client() as client:
+        profile_raw, metrics_raw, income_raw = await asyncio.gather(
+            _get_json(client, profile_url, "profile"),
+            _get_json(client, ratios_ttm_url, "ratios-ttm"),
+            _get_json(client, income_url, "income-statement"),
+        )
 
     profile = profile_raw[0] if isinstance(profile_raw, list) and profile_raw else {}
     metrics = metrics_raw[0] if isinstance(metrics_raw, list) and metrics_raw else {}
@@ -133,12 +121,6 @@ async def get_company_snapshot(ticker: str) -> dict:
             "ratios_ttm_url": ratios_ttm_url_redacted,
             "income_statement_url": income_url_redacted,
         },
-    )
-    logger.info(
-        "get_company_snapshot completed ticker=%s name=%s period=%s",
-        symbol,
-        snapshot.name,
-        snapshot.period_latest,
     )
     return snapshot.model_dump()
 

@@ -47,14 +47,11 @@ class MCPSession:
         self._command = command
         self._toolkit: Any | None = None
         self._stack: AsyncExitStack | None = None
-        logger.info("MCPSession created for command: %s", " ".join(command))
 
     async def start(self) -> None:
         """Start the MCP session and initialize the toolkit/client."""
         if self._toolkit is not None:
-            logger.info("MCPSession already started: %s", " ".join(self._command))
             return
-        logger.info("Starting MCP session: %s", " ".join(self._command))
 
         stack = AsyncExitStack()
         await stack.__aenter__()
@@ -62,13 +59,11 @@ class MCPSession:
             try:
                 from langchain_mcp import MCPToolkit  # type: ignore
 
-                logger.info("Using langchain_mcp.MCPToolkit integration")
                 toolkit = MCPToolkit(command=self._command)
                 toolkit = await _enter_if_needed(stack, toolkit)
             except ImportError:
                 from langchain_mcp_adapters.tools import load_mcp_tools  # type: ignore
 
-                logger.info("Using langchain_mcp_adapters fallback integration")
                 cmd, args = _split_command(self._command)
                 connection = {
                     "transport": "stdio",
@@ -76,12 +71,10 @@ class MCPSession:
                     "args": args,
                 }
                 tools = await load_mcp_tools(None, connection=connection)
-                logger.info("Loaded %d MCP tools via adapters fallback", len(tools))
                 toolkit = _StaticToolkit(tools)
 
             self._toolkit = toolkit
             self._stack = stack
-            logger.info("MCP session started: %s", " ".join(self._command))
         except Exception:
             logger.exception("Failed to start MCP session: %s", " ".join(self._command))
             await stack.aclose()
@@ -89,7 +82,6 @@ class MCPSession:
 
     async def stop(self) -> None:
         """Stop the MCP session and close any underlying subprocess resources."""
-        logger.info("Stopping MCP session: %s", " ".join(self._command))
         if self._stack is not None:
             try:
                 await self._stack.aclose()
@@ -101,12 +93,10 @@ class MCPSession:
                 logger.warning("Ignoring known anyio cancel-scope shutdown error: %s", message)
         self._stack = None
         self._toolkit = None
-        logger.info("MCP session stopped: %s", " ".join(self._command))
 
     def get_toolkit(self):
         """Return the initialized toolkit/client for tool discovery."""
         if self._toolkit is None:
             logger.error("get_toolkit called before start(): %s", " ".join(self._command))
             raise RuntimeError("MCPSession has not been started")
-        logger.info("Returning toolkit for MCP session: %s", " ".join(self._command))
         return self._toolkit

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,8 +20,6 @@ from agent.service import run_analysis
 from app.db.crud import get_job, update_job
 from app.db.engine import init_db
 from worker.celery_app import celery
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_result_json(result: Any) -> str:
@@ -61,9 +58,11 @@ def _run_analysis_with_real_stdio(prompt: str, job_id: str) -> Any:
 
 @celery.task(name="worker.run_analysis_task")
 def run_analysis_task(job_id: str) -> None:
+    print(f"[STEP] Worker consumed job (job_id={job_id})", flush=True)
     init_db()
     job = get_job(job_id)
     if job is None:
+        print(f"[STEP] Worker could not find job in DB (job_id={job_id})", flush=True)
         return
 
     try:
@@ -84,12 +83,7 @@ def run_analysis_task(job_id: str) -> None:
             update_job(job_id, status="FAILED", progress=100, error="prompt missing")
             return
 
-        logger.info(
-            "run_analysis_task executing job_id=%s original_prompt=%r",
-            job_id,
-            prompt,
-        )
-
+        print(f"[STEP] Worker sent prompt to agent (job_id={job_id})", flush=True)
         result = _run_analysis_with_real_stdio(
             prompt=prompt,
             job_id=job_id,
@@ -102,5 +96,7 @@ def run_analysis_task(job_id: str) -> None:
             result_json=result_json,
             error=None,
         )
+        print(f"[STEP] Result stored in database (job_id={job_id})", flush=True)
     except Exception as exc:
         update_job(job_id, status="FAILED", progress=100, error=str(exc))
+        print(f"[STEP] Result failed and stored in database (job_id={job_id})", flush=True)

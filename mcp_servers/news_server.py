@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import logging
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
 from .common import build_http_client, get_env, now_iso
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-mcp = FastMCP("newsapi-news")
+mcp = FastMCP("newsapi-news", log_level="WARNING")
 
 
 @mcp.tool()
@@ -30,13 +23,6 @@ async def get_recent_news(
     q = query.strip()
     if not q:
         raise ValueError("Query must not be empty")
-    logger.info(
-        "get_recent_news invoked query=%r page_size=%s days_back=%s language=%s",
-        q,
-        page_size,
-        days_back,
-        language,
-    )
 
     capped_page_size = max(1, min(page_size, 25))
     start_date = (datetime.now(timezone.utc) - timedelta(days=max(days_back, 0))).date().isoformat()
@@ -53,19 +39,15 @@ async def get_recent_news(
         "apiKey": api_key,
     }
 
-    try:
-        async with build_http_client() as client:
-            try:
-                response = await client.get(endpoint, params=params)
-                response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                status_code = exc.response.status_code if exc.response is not None else "unknown"
-                raise RuntimeError(f"newsapi request failed with status {status_code}") from exc
-            except httpx.HTTPError as exc:
-                raise RuntimeError(f"newsapi request failed: {exc}") from exc
-    except Exception:
-        logger.exception("get_recent_news failed query=%r", q)
-        raise
+    async with build_http_client() as client:
+        try:
+            response = await client.get(endpoint, params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response is not None else "unknown"
+            raise RuntimeError(f"newsapi request failed with status {status_code}") from exc
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"newsapi request failed: {exc}") from exc
 
     try:
         payload = response.json()
@@ -103,12 +85,6 @@ async def get_recent_news(
         "fetched_at": now_iso(),
         "sources": {"newsapi_url": redacted_url},
     }
-    logger.info(
-        "get_recent_news completed query=%r returned_articles=%s total_results=%s",
-        q,
-        len(articles),
-        result["totalResults"],
-    )
     return result
 
 

@@ -5,11 +5,7 @@
 
 from __future__ import annotations
 
-import logging
-
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-
-logger = logging.getLogger(__name__)
 
 SYSTEM_MESSAGE = """You are an autonomous investment research agent. You have access to exactly two tools:
 
@@ -89,7 +85,6 @@ Return ONLY the final JSON object. No extra text, no markdown fences."""
 
 def build_prompt() -> ChatPromptTemplate:
     """Build the agent prompt used by the OpenAI tools agent."""
-    logger.info("Building agent prompt")
     return ChatPromptTemplate.from_messages(
         [
             ("system", SYSTEM_MESSAGE),

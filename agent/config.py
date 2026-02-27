@@ -23,7 +23,6 @@ class Settings:
 
 def get_settings() -> Settings:
     """Load environment variables and return normalized settings."""
-    logger.info("Loading environment variables from .env")
     load_dotenv()
 
     openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -37,5 +36,4 @@ def get_settings() -> Settings:
         fmp_command=["python", "-m", "mcp_servers.fmp_server"],
         news_command=["python", "-m", "mcp_servers.news_server"],
     )
-    logger.info("Settings loaded (model=%s)", settings.openai_model)
     return settings

@@ -28,7 +28,6 @@ async def _get_tools(toolkit: Any) -> list:
 
 async def create_toolkits(settings: Settings):
     """Start MCP sessions and return combined tools plus session handles."""
-    logger.info("Creating MCP toolkits")
     fmp_session = MCPSession(settings.fmp_command)
     news_session = MCPSession(settings.news_command)
 
@@ -41,12 +40,6 @@ async def create_toolkits(settings: Settings):
 
         fmp_tools = await _get_tools(fmp_session.get_toolkit())
         news_tools = await _get_tools(news_session.get_toolkit())
-        logger.info(
-            "Discovered tools (fmp=%d, news=%d, total=%d)",
-            len(fmp_tools),
-            len(news_tools),
-            len(fmp_tools) + len(news_tools),
-        )
 
         return {
             "sessions": [fmp_session, news_session],

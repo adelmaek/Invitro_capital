@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,7 +18,6 @@ from app.db.models import Job
 from worker.tasks import run_analysis_task
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 class AnalysisRequest(BaseModel):
@@ -57,6 +55,7 @@ def _serialize_job(job: Job) -> dict[str, Any]:
 
 @router.post("/analysis")
 def create_analysis_job(payload: AnalysisRequest, db: Session = Depends(get_db)) -> dict[str, str]:
+    print("[STEP] API received request", flush=True)
     request_body = {"prompt": payload.prompt}
     job = Job(
         status="QUEUED",
@@ -66,12 +65,8 @@ def create_analysis_job(payload: AnalysisRequest, db: Session = Depends(get_db))
     db.add(job)
     db.commit()
     db.refresh(job)
-    logger.info(
-        "create_analysis_job queued job_id=%s original_prompt=%r",
-        job.id,
-        payload.prompt,
-    )
     run_analysis_task.delay(job.id)
+    print(f"[STEP] Stored by Redis queue (job_id={job.id})", flush=True)
 
     return {"job_id": job.id}
 
@@ -103,4 +98,5 @@ def get_analysis_result(job_id: str, db: Session = Depends(get_db)) -> dict[str,
 
     if not isinstance(parsed, dict):
         raise HTTPException(status_code=500, detail="result_json must decode to an object")
+    print(f"[STEP] API fetched result (job_id={job_id})", flush=True)
     return parsed
